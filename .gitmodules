@@ -1,0 +1,3 @@
+[submodule "local_feature_evaluation/SuperPointPretrainedNetwork"]
+	path = local_feature_evaluation/SuperPointPretrainedNetwork
+	url = https://github.com/magicleap/SuperPointPretrainedNetwork.git
