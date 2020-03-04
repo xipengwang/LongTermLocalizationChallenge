@@ -14,6 +14,7 @@ from reconstruction_pipeline import recover_database_images_and_ids
 from SuperPointPretrainedNetwork.demo_superpoint import SuperPointFrontend
 from SuperPointPretrainedNetwork.demo_superpoint import myjet
 
+from r2d2.extract import r2d2_set_gpu, r2d2_load_model, r2d2_extract_keypoints
 
 def export_features(images, paths, args):
     # Export the features.
@@ -49,7 +50,6 @@ def export_super_features(images, paths, args):
     for image_name, _ in tqdm(images.items(), total=len(images.items())):
         image_path = os.path.join(paths.image_path, image_name)
         if os.path.exists(image_path):
-            sift = cv.xfeatures2d.SIFT_create()
             img0 = cv.imread(image_path)
             gray = cv.cvtColor(img0, cv.COLOR_BGR2GRAY)
             input_image = gray.astype('float32') / 255.0
@@ -65,12 +65,43 @@ def export_super_features(images, paths, args):
                     heatmap = (heatmap - heatmap.min()) / (heatmap.max() - heatmap.min() + .00001)
                     out3 = myjet[np.round(np.clip(heatmap * 10, 0, 9)).astype('int'), :]
                     out3 = (out3 * 255).astype('uint8')
+                    print(heatmap.shape)
                     ax1.imshow(heatmap)
                 ax2.imshow(cv.cvtColor(img0, cv.COLOR_BGR2RGB))
                 ax2.scatter(kps[:, 0], kps[:, 1])
                 plt.show()
         features_path = os.path.join(paths.image_path, '%s.%s' % (image_name, args.method_name))
         np.savez(features_path, keypoints=kps, descriptors=descs)
+
+
+
+def export_r2d2_features(images, paths, args):
+    print('Exporting features...')
+    iscuda = r2d2_set_gpu()
+    r2d2_net = r2d2_load_model(args.weights_path, iscuda)
+    top_k = 5000
+    for image_name, _ in tqdm(images.items(), total=len(images.items())):
+        image_path = os.path.join(paths.image_path, image_name)
+        if os.path.exists(image_path):
+            img0 = cv.imread(image_path)
+            (kps, descs, scores) =  r2d2_extract_keypoints(r2d2_net, iscuda, image_path)
+            idxs = scores.argsort()[-top_k or None:]
+            kps = kps[idxs]
+            descs = descs[idxs]
+            scores = scores[idxs]
+
+            idxs = np.nonzero(scores > 0.98)
+            kps = kps[idxs]
+            descs = descs[idxs]
+            scores = scores[idxs]
+
+            if args.plot:
+                _, (ax1, ax2) = plt.subplots(2, 1)
+                ax2.imshow(cv.cvtColor(img0, cv.COLOR_BGR2RGB))
+                ax2.scatter(kps[:, 0], kps[:, 1])
+                plt.show()
+        features_path = os.path.join(paths.image_path, '%s.%s' % (image_name, args.method_name))
+        np.savez(features_path, keypoints=kps, descriptors=descs, scores=scores)
 
 
 def main():
@@ -91,7 +122,8 @@ def main():
 
     images, _ = recover_database_images_and_ids(paths, args)
     # export_features(images, paths, args)
-    export_super_features(images, paths, args)
+    # export_super_features(images, paths, args)
+    export_r2d2_features(images, paths, args)
 
     return
 
